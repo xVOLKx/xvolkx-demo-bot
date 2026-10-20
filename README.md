@@ -56,7 +56,7 @@
 - <img src="images/github.svg" width="24"> GitHub
  
 ## <img src="images/github.svg" width="24"> GitHub
-[Перейти в репозиторий](https://github.com/xVOLKx/crm-bot)
+[Перейти в репозиторий](https://github.com/xVOLKx/xvolkx-demo-bot)
  
 ## <img src="images/license.svg" width="28"> Лицензия
 
