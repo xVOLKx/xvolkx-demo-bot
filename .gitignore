@@ -1,0 +1,15 @@
+# Зависимости
+node_modules/
+
+# Переменные окружения (СЕКРЕТЫ!)
+.env
+.env.local
+.env.production
+
+# Логи
+*.log
+npm-debug.log*
+
+# Файлы ОС
+.DS_Store
+Thumbs.db
