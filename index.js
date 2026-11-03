@@ -117,6 +117,19 @@ bot.action('ai_examples', async (ctx) => {
   );
 });
 
+// === Команды ===
+bot.action('open_commands', async (ctx) => {
+  await ctx.reply(
+    '📚 *Доступные команды:*\n\n' +
+    '• *статистика* — общая статистика\n' +
+    '• *топ клиентов* — топ-5 клиентов\n' +
+    '• *отчёт за 3 дня* — последние заказы\n' +
+    '• *прогноз* — прогноз заказов\n\n' +
+    'Просто напиши одно из этих слов в чат!',
+    { format: 'markdown', attachments: [mainMenu()] }
+  );
+});
+
 bot.action('open_help', async (ctx) => {
   await ctx.reply(
     '❓ *Помощь*\n\n' +
@@ -394,12 +407,17 @@ bot.on('message_created', async (ctx) => {
   const userId = ctx.user?.user_id;
   const state = userStates[userId];
 
+  // Если пользователь просто пишет текст (не в диалоге) - отдаем Умному ИИ
   if (!state) {
-    // Если не диалог — просто заглушка
-    await ctx.reply(
-      '🤔 Я понимаю только кнопки. Используйте /start, чтобы открыть главное меню.',
-      { attachments: [mainMenu()] }
-    );
+    try {
+      const answer = await crm.smartAskYandexGPT(text);
+      if (answer) {
+        await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
+      }
+    } catch (err) {
+      console.error(err);
+      await ctx.reply('❌ Ошибка при запросе к ИИ.');
+    }
     return;
   }
 
@@ -514,7 +532,7 @@ bot.on('message_created', async (ctx) => {
     await ctx.reply('🤔 Думаю...');
 
     try {
-      const answer = await ai.askDeveloper(text);
+      const answer = await crm.smartAskYandexGPT(text);
       await ctx.reply(`🤖 ${answer}`, {
         format: 'markdown',
         attachments: [aiMenu()],

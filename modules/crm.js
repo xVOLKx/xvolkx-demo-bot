@@ -369,46 +369,147 @@ async function createOrdersChart() {
 }
 
 // ============================================================
-// УМНЫЙ ИИ
+// УМНЫЙ ИИ (с запросами к базе данных)
 // ============================================================
 async function smartAskYandexGPT(prompt) {
   const text = prompt.toLowerCase();
 
+  // --- 1. ОТЧЁТ ПО ДАТАМ ---
   if (text.includes('отчёт') || text.includes('отчет')) {
-    const orders = await getOrders();
-    if (orders.length === 0) return '📭 Заказов пока нет.';
+    let limit = 5;
+    let days = null;
 
-    let report = `📋 *Последние ${Math.min(orders.length, 5)} заказов:*\n\n`;
-    orders.slice(0, 5).forEach((o) => {
-      const clientName = o.client_name || '❌';
-      report += `#${o.id} | ${clientName} | ${statusEmoji(o.status)} ${o.status}\n`;
+    if (text.includes('за 3 дня') || text.includes('за три дня')) days = 3;
+    else if (text.includes('за неделю')) days = 7;
+    else if (text.includes('за месяц')) days = 30;
+
+    let whereClause = '';
+    const params = [];
+    if (days) {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      whereClause = 'WHERE o.created_at >= $1';
+      params.push(date);
+    }
+
+    const match = text.match(/\d+/);
+    if (match) {
+      const num = parseInt(match[0]);
+      if (num >= 1 && num <= 20) limit = num;
+    }
+
+    const res = await query(`
+      SELECT o.id, o.status, o.created_at, c.name AS client_name
+      FROM crm_orders o
+      LEFT JOIN crm_clients c ON o.client_id = c.id
+      ${whereClause}
+      ORDER BY o.created_at DESC
+      LIMIT $${params.length + 1}
+    `, [...params, limit]);
+
+    if (res.rows.length === 0) {
+      return days ? `📭 Заказов за последние ${days} дней нет.` : '📭 Заказов пока нет.';
+    }
+
+    const periodText = days ? `за последние ${days} дней` : '';
+    let report = `📋 *Последние ${limit} заказов ${periodText}*:\n\n`;
+    report += `┌─────────────────────────────────────────────┐\n`;
+    res.rows.forEach((o) => {
+      const clientName = o.client_name || '❌ Клиент удалён';
+      const statusEmoji = o.status === 'new' ? '🆕' :
+                          o.status === 'in_progress' ? '⏳' :
+                          o.status === 'completed' ? '✅' : '❓';
+      const date = new Date(o.created_at);
+      const formattedDate = date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      report += `│ #${o.id} | ${clientName.padEnd(20).slice(0, 20)} | ${statusEmoji} ${o.status.padEnd(10)} | ${formattedDate}\n`;
     });
+    report += `└─────────────────────────────────────────────┘`;
     return report;
   }
 
-  if (text.includes('статистик') || text.includes('сколько')) {
+  // --- 2. ТОП КЛИЕНТОВ ---
+  if (text.includes('топ клиент') || text.includes('топ клиентов')) {
+    const res = await query(`
+      SELECT c.name AS client_name, COUNT(o.id) as order_count
+      FROM crm_orders o
+      JOIN crm_clients c ON o.client_id = c.id
+      GROUP BY c.id, c.name
+      ORDER BY order_count DESC
+      LIMIT 5
+    `);
+
+    if (res.rows.length === 0) return '📭 Нет данных по клиентам.';
+
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+    let report = '🏆 *Топ-5 клиентов по заказам:*\n\n';
+    report += `┌──────────────────────────────────────┐\n`;
+    res.rows.forEach((row, i) => {
+      report += `│ ${medals[i] || '•'} ${row.client_name.padEnd(20).slice(0, 20)} — ${row.order_count} заказов\n`;
+    });
+    report += `└──────────────────────────────────────┘`;
+    return report;
+  }
+
+  // --- 3. ПРОГНОЗ ---
+  if (text.includes('прогноз')) {
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    
+    const res1 = await query('SELECT COUNT(*) FROM crm_orders WHERE created_at >= $1', [lastWeek]);
+    const lastWeekOrders = parseInt(res1.rows[0].count);
+
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    
+    const res2 = await query('SELECT COUNT(*) FROM crm_orders WHERE created_at >= $1 AND created_at < $2', [twoWeeksAgo, lastWeek]);
+    const prevWeekOrders = parseInt(res2.rows[0].count);
+
+    const trend = lastWeekOrders - prevWeekOrders;
+    const emoji = trend > 0 ? '📈' : trend < 0 ? '📉' : '➖';
+    const forecast = Math.round(lastWeekOrders * 1.1);
+
+    return `🔮 *Прогноз заказов на следующую неделю:*\n\n` +
+           `┌──────────────────────────────────────┐\n` +
+           `│ 📅 Прошлая неделя: ${prevWeekOrders} заказов\n` +
+           `│ 📅 Текущая неделя: ${lastWeekOrders} заказов\n` +
+           `│ ${emoji} Тренд: ${trend > 0 ? '+' : ''}${trend}\n` +
+           `│ 🎯 Ожидаем: ~${forecast} заказов\n` +
+           `└──────────────────────────────────────┘`;
+  }
+
+  // --- 4. СТАТИСТИКА ---
+  if (text.includes('статистик') || text.includes('сколько') || text.includes('цифр')) {
     const s = await getStats();
     return formatStats(s);
   }
 
-  if (text.includes('прогноз')) {
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const res = await query(
-      'SELECT COUNT(*) FROM crm_orders WHERE created_at >= $1',
-      [weekAgo]
-    );
-    const lastWeek = parseInt(res.rows[0].count);
-    return `🔮 *Прогноз:*\n\nЗа последнюю неделю: ${lastWeek} заказов.\nОжидаем: ~${Math.round(lastWeek * 1.1)}.`;
-  }
+  // --- 5. ЦЕНЫ И ОБЩИЕ ВОПРОСЫ (Yandex GPT) ---
+  const priceList = `
+Цены на услуги:
+- MAX-бот (базовый): от 2500 ₽
+- MAX-бот с админ-панелью: от 3500 ₽
+- Бот-парсер: от 3000 ₽
+- CRM-бот для бизнеса: от 5000 ₽
+- Интеграция с API: от 2000 ₽
+`;
+
+  const contextPrompt = `
+Ты — помощник в CRM-системе (мессенджер MAX).
+Вот примерные цены на услуги: ${priceList}
+Если спрашивают про разработку — скажи, что мы разрабатываем ботов, парсеры и CRM на Node.js.
+Если вопрос не по теме — вежливо направь к деловым вопросам.
+Отвечай кратко, по делу, дружелюбно.
+
+Вопрос пользователя: "${prompt}"`;
 
   try {
+    const axios = require('axios');
     const response = await axios.post(
       'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
       {
         modelUri: `gpt://${process.env.YANDEX_FOLDER_ID}/yandexgpt-lite`,
         completionOptions: { temperature: 0.6, maxTokens: 250 },
-        messages: [{ role: 'user', text: prompt }],
+        messages: [{ role: 'user', text: contextPrompt }],
       },
       {
         headers: {
@@ -420,7 +521,7 @@ async function smartAskYandexGPT(prompt) {
     return response.data.result.alternatives[0].message.text;
   } catch (err) {
     console.error('❌ Ошибка ИИ:', err.message);
-    return '⚠️ ИИ временно недоступен.';
+    return '⚠️ ИИ временно недоступен. Попробуйте позже.';
   }
 }
 

@@ -11,6 +11,9 @@ function mainMenu() {
     ],
     [
       Keyboard.button.callback('🤖 Админ-бот с ИИ', 'open_ai'),
+      Keyboard.button.callback('📚 Команды', 'open_commands'),
+    ],
+    [
       Keyboard.button.callback('❓ Помощь', 'open_help'),
     ],
   ]);
