@@ -382,12 +382,23 @@ bot.action('noop', async (ctx) => {
 bot.action('parser_ai', async (ctx) => {
   try {
     await ctx.reply('🤖 Анализирую курсы...');
-    const rates = await parser.getLatestRates();
+    const userId = ctx.user?.user_id;
+    const selected = userSelections[userId] || [];
+
+    let rates = await parser.getLatestRates();
+
+    // Фильтруем по выбору пользователя
+    if (selected.length > 0) {
+      rates = rates.filter(r => selected.includes(r.name));
+    }
 
     if (rates.length === 0) {
-      await ctx.reply('📭 Нет данных. Сначала нажмите "Курсы ЦБ".');
+      await ctx.reply('📭 Вы не выбрали валюты. Используйте "Выбор валют".');
       return;
     }
+
+    // Ограничиваем до 10 валют, чтобы ИИ не завис
+    rates = rates.slice(0, 10);
 
     const analysis = await parser.analyzeRates(rates);
     await ctx.reply(`🤖 *Анализ курсов:*\n\n${analysis}`, { format: 'markdown' });

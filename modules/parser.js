@@ -189,11 +189,11 @@ async function createChart(rates) {
 }
 
 // ============================================================
-// ИИ-АНАЛИЗ
+// ИИ-АНАЛИЗ (только по выбранным валютам)
 // ============================================================
 async function analyzeRates(rates) {
   try {
-    const prompt = `Проанализируй кратко курсы валют: ${rates.map(r => `${r.name}: ${r.value} ₽`).join(', ')}. Напиши 1-2 предложения анализа и 1 прогноз.`;
+    const prompt = `Проанализируй кратко курсы валют: ${rates.map(r => `${r.name}: ${r.value} ₽`).join(', ')}. Напиши 1-2 предложения анализа и 1 предложение прогноза.`;
     
     const response = await axios.post(
       'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
