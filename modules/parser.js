@@ -138,6 +138,11 @@ async function createChart(rates) {
   const canvas = createCanvas(800, 400);
   const ctx = canvas.getContext('2d');
 
+  // Белый фон
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 800, 400);
+
+  // Наш фирменный градиент для столбцов
   const gradient = ctx.createLinearGradient(0, 0, 0, 400);
   gradient.addColorStop(0, '#4F8CF7');
   gradient.addColorStop(1, '#A855F7');
@@ -147,7 +152,7 @@ async function createChart(rates) {
     data: {
       labels: rates.map(r => r.name),
       datasets: [{
-        label: 'Курс (₽)',
+        label: 'Курс валют (₽)',
         data: rates.map(r => r.value),
         backgroundColor: gradient,
         borderColor: '#4F8CF7',
@@ -157,11 +162,25 @@ async function createChart(rates) {
     },
     options: {
       plugins: {
-        legend: { labels: { color: '#ffffff' } },
+        legend: { 
+          labels: { color: '#000000', font: { size: 14 } } // Черный текст
+        },
       },
       scales: {
-        x: { ticks: { color: '#ffffff' } },
-        y: { ticks: { color: '#ffffff' } },
+        x: {
+          ticks: {
+            color: '#000000', // Черный текст подписей
+            font: { size: 11 }, 
+            maxRotation: 45,    // Наклон, чтобы влезли длинные валюты
+            minRotation: 45,
+            autoSkip: false,    // Показывать все
+          },
+          grid: { display: false }
+        },
+        y: {
+          ticks: { color: '#000000' },
+          grid: { color: 'rgba(0, 0, 0, 0.1)' } // Светлая сетка
+        },
       },
     },
   });

@@ -452,16 +452,16 @@ bot.on('message_created', async (ctx) => {
 // ============================================================
 async function start() {
   try {
-    // Инициализация БД (ВРЕМЕННО ОТКЛЮЧЕНО ДО VPS)
-    // await crm.initDatabase();
-    // await parser.initParserDatabase();
-    // parser.startCron(bot, process.env.ADMIN_CHAT_ID);
+    // Инициализация БД
+    await crm.initDatabase();
+    await parser.initParserDatabase();
+    
+    // Запуск Cron
+    parser.startCron(bot, process.env.ADMIN_CHAT_ID);
 
     bot.start();
-    console.log('🚀 XvolkX Demo Bot запущен (БД отключена — ждём VPS)!');
+    console.log('🚀 XvolkX Demo Bot запущен!');
   } catch (err) {
     console.error('❌ Ошибка запуска:', err);
   }
 }
-
-start();
