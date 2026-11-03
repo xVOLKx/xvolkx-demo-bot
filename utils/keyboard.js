@@ -97,7 +97,7 @@ function selectCurrenciesKeyboard(currencies, selected, page = 0, perPage = 10) 
     rows.push(row);
   }
 
-  // Кнопки навигации
+  // Кнопки навигации (Назад/Вперед)
   const navRow = [];
   const totalPages = Math.ceil(currencies.length / perPage);
   if (page > 0) navRow.push(Keyboard.button.callback('⬅️', `page_${page - 1}`));
