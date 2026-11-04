@@ -477,13 +477,79 @@ async function smartAskYandexGPT(prompt) {
            `└──────────────────────────────────────┘`;
   }
 
-  // --- 4. СТАТИСТИКА ---
+  // --- 4. РЕКОМЕНДАЦИИ ПО КЛИЕНТАМ ---
+  if (text.includes('рекомендац')) {
+    const clients = await query('SELECT * FROM crm_clients');
+    let recommendations = '💡 *Рекомендации по клиентам:*\n\n';
+    recommendations += `┌──────────────────────────────────────┐\n`;
+    let hasRecommendations = false;
+
+    for (const client of clients.rows) {
+      const orderCountRes = await query('SELECT COUNT(*) FROM crm_orders WHERE client_id = $1', [client.id]);
+      const orderCount = parseInt(orderCountRes.rows[0].count);
+      
+      if (orderCount >= 5) {
+        recommendations += `│ • ${client.name.padEnd(20).slice(0, 20)}: ${orderCount} заказов. Скидка 5-10%\n`;
+        hasRecommendations = true;
+      } else if (orderCount >= 3) {
+        recommendations += `│ • ${client.name.padEnd(20).slice(0, 20)}: ${orderCount} заказа. Доп. услуга\n`;
+        hasRecommendations = true;
+      }
+    }
+
+    recommendations += `└──────────────────────────────────────┘`;
+    
+    if (!hasRecommendations) {
+      return '📭 Нет рекомендаций.';
+    }
+    return recommendations;
+  }
+
+  // --- 5. СРАВНЕНИЕ ПЕРИОДОВ ---
+  if (text.includes('сравни неделю') || text.includes('сравни месяц')) {
+    const days = text.includes('месяц') ? 30 : 7;
+    
+    const currentPeriodStart = new Date();
+    currentPeriodStart.setDate(currentPeriodStart.getDate() - days);
+    
+    const prevPeriodStart = new Date();
+    prevPeriodStart.setDate(prevPeriodStart.getDate() - days * 2);
+    const prevPeriodEnd = new Date();
+    prevPeriodEnd.setDate(prevPeriodEnd.getDate() - days);
+
+    const curRes = await query('SELECT COUNT(*) FROM crm_orders WHERE created_at >= $1', [currentPeriodStart]);
+    const currentCount = parseInt(curRes.rows[0].count);
+
+    const prevRes = await query('SELECT COUNT(*) FROM crm_orders WHERE created_at >= $1 AND created_at < $2', [prevPeriodStart, prevPeriodEnd]);
+    const prevCount = parseInt(prevRes.rows[0].count);
+
+    const diff = currentCount - prevCount;
+    const percent = prevCount > 0 ? Math.round((diff / prevCount) * 100) : (currentCount > 0 ? 100 : 0);
+    const emoji = diff > 0 ? '📈' : diff < 0 ? '📉' : '➖';
+
+    let analysisText = '';
+    if (currentCount > 0 && prevCount === 0) analysisText = `📈 *Первые заказы!* Отличный старт.`;
+    else if (diff > 0) analysisText = `📈 *Рост на ${percent}%* — заказов стало больше на ${diff} шт.`;
+    else if (diff < 0) analysisText = `📉 *Снижение на ${Math.abs(percent)}%* — заказов стало меньше на ${Math.abs(diff)} шт.`;
+    else analysisText = `➖ *Без изменений* — количество заказов на том же уровне.`;
+
+    const periodText = days === 7 ? 'недель' : 'месяцев';
+    return `📊 *Сравнение ${periodText}*\n\n` +
+           `┌─────────────────────────────────────────────┐\n` +
+           `│ 📅 Предыдущий период: ${prevCount} заказов\n` +
+           `│ 📅 Текущий период: ${currentCount} заказов\n` +
+           `│ ${emoji} Изменение: ${diff > 0 ? '+' : ''}${diff} (${percent}%)\n` +
+           `└─────────────────────────────────────────────┘\n\n` +
+           `🤖 *Анализ:*\n${analysisText}`;
+  }
+
+  // --- 5. СТАТИСТИКА ---
   if (text.includes('статистик') || text.includes('сколько') || text.includes('цифр')) {
     const s = await getStats();
     return formatStats(s);
   }
 
-  // --- 5. ЦЕНЫ И ОБЩИЕ ВОПРОСЫ (Yandex GPT) ---
+  // --- 6. ЦЕНЫ И ОБЩИЕ ВОПРОСЫ (Yandex GPT) ---
   const priceList = `
 Цены на услуги:
 - MAX-бот (базовый): от 2500 ₽
