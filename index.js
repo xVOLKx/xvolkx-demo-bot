@@ -245,30 +245,37 @@ bot.action('parser_week', async (ctx) => {
   try {
     await ctx.reply('⏳ Строю график...');
     const userId = ctx.user?.user_id;
-    const selected = userSelections[userId] || []; // Получаем выбранные валюты
+    const selected = userSelections[userId] || [];
 
     let rates = await parser.getLatestRates();
-
-    // Если пользователь выбрал конкретные валюты — фильтруем
     if (selected.length > 0) {
       rates = rates.filter(r => selected.includes(r.name));
     }
 
-    const chart = await parser.createChart(rates.slice(0, 10));
+    // Убираем дубликаты
+    const uniqueRates = [];
+    const seen = new Set();
+    for (const rate of rates) {
+      if (!seen.has(rate.name)) {
+        seen.add(rate.name);
+        uniqueRates.push(rate);
+      }
+    }
 
-    // Используем uploadImage из MAX (через ctx.api.raw + axios)
+    if (uniqueRates.length === 0) {
+      await ctx.reply('❌ Вы не выбрали ни одной валюты. Используйте "Выбор валют".');
+      return;
+    }
+
+    const chart = await parser.createChart(uniqueRates.slice(0, 10));
+
     const FormData = require('form-data');
     const fs = require('fs');
     const path = require('path');
-
-    // Сохраняем временно
     const tmpPath = path.join(__dirname, 'tmp-chart.png');
     fs.writeFileSync(tmpPath, chart);
 
-    // Получаем URL для загрузки
     const uploadData = await ctx.api.raw.post('uploads', { query: { type: 'image' } });
-
-    // Загружаем
     const form = new FormData();
     form.append('data', fs.createReadStream(tmpPath));
     const axios = require('axios');
@@ -278,14 +285,11 @@ bot.action('parser_week', async (ctx) => {
       maxBodyLength: Infinity,
     });
 
-    // Извлекаем токен
     const keys = Object.keys(response.data.photos);
     const token = response.data.photos[keys[0]].token;
 
-    // Удаляем временный файл
     fs.unlinkSync(tmpPath);
 
-    // Отправляем
     await ctx.reply('📊 Ваш график курсов', {
       attachments: [{ type: 'image', payload: { token } }],
     });
@@ -377,33 +381,74 @@ bot.action('noop', async (ctx) => {
   await ctx.answerOnCallback({});
 });
 
-// ИИ-анализ
-bot.action('parser_ai', async (ctx) => {
+// Полный отчёт (График + ИИ в одном сообщении)
+bot.action('parser_report', async (ctx) => {
   try {
-    await ctx.reply('🤖 Анализирую курсы...');
+    await ctx.reply('⏳ Собираю данные, строю график и анализирую...');
     const userId = ctx.user?.user_id;
     const selected = userSelections[userId] || [];
 
     let rates = await parser.getLatestRates();
-
-    // Фильтруем по выбору пользователя
     if (selected.length > 0) {
       rates = rates.filter(r => selected.includes(r.name));
     }
 
-    if (rates.length === 0) {
+    // Очистка дублей
+    const uniqueRates = [];
+    const seen = new Set();
+    for (const rate of rates) {
+      if (!seen.has(rate.name)) {
+        seen.add(rate.name);
+        uniqueRates.push(rate);
+      }
+    }
+
+    if (uniqueRates.length === 0) {
       await ctx.reply('📭 Вы не выбрали валюты. Используйте "Выбор валют".');
       return;
     }
 
-    // Ограничиваем до 10 валют, чтобы ИИ не завис
-    rates = rates.slice(0, 10);
+    const chart = await parser.createChart(uniqueRates.slice(0, 10));
 
-    const analysis = await parser.analyzeRates(rates);
-    await ctx.reply(`🤖 *Анализ курсов:*\n\n${analysis}`, { format: 'markdown' });
+    // Загрузка картинки в MAX
+    const FormData = require('form-data');
+    const fs = require('fs');
+    const path = require('path');
+    const tmpPath = path.join(__dirname, 'tmp-chart.png');
+    fs.writeFileSync(tmpPath, chart);
+
+    const uploadData = await ctx.api.raw.post('uploads', { query: { type: 'image' } });
+    const form = new FormData();
+    form.append('data', fs.createReadStream(tmpPath));
+    const axios = require('axios');
+    const response = await axios.post(uploadData.url, form, {
+      headers: form.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+    });
+    const keys = Object.keys(response.data.photos);
+    const token = response.data.photos[keys[0]].token;
+    fs.unlinkSync(tmpPath);
+
+    // Формируем текст
+    let text = '📊 *Курсы валют (ЦБ РФ)*\n\n';
+    uniqueRates.slice(0, 7).forEach(item => {
+      text += `• ${item.name}: ${parseFloat(item.value).toFixed(2)} ₽\n`;
+    });
+    if (uniqueRates.length > 7) text += `\n_... и ещё ${uniqueRates.length - 7} валют_`;
+
+    // ИИ-анализ
+    const analysis = await parser.analyzeRates(uniqueRates.slice(0, 10));
+    text += `\n\n🤖 *Анализ и прогноз:*\n${analysis}`;
+
+    // Отправляем картинку с текстом в одном сообщении
+    await ctx.reply(text, {
+      format: 'markdown',
+      attachments: [{ type: 'image', payload: { token } }],
+    });
   } catch (err) {
     console.error(err);
-    await ctx.reply('❌ Ошибка ИИ-анализа');
+    await ctx.reply('❌ Ошибка при формировании отчёта');
   }
 });
 
@@ -591,3 +636,4 @@ async function start() {
     console.error('❌ Ошибка запуска:', err);
   }
 }
+start();
