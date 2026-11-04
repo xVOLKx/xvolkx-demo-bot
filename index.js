@@ -57,6 +57,9 @@ bot.command('start', async (ctx) => {
 // ГЛАВНОЕ МЕНЮ — ОБРАБОТЧИКИ
 // ============================================================
 bot.action('open_crm', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  userSelections[userId] = 'crm_mode'; // Запоминаем режим CRM
+  
   await ctx.reply(
     '🚀 *CRM-бот*\n\nУправление клиентами, заказами и статистикой.\n\n👇 *Выберите действие:*',
     { format: 'markdown', attachments: [crmMenu()] }
@@ -64,6 +67,9 @@ bot.action('open_crm', async (ctx) => {
 });
 
 bot.action('open_parser', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  userSelections[userId] = 'parser_mode'; // Запоминаем режим Парсера
+  
   await ctx.reply(
     '📊 *Парсер валют*\n\nКурсы валют с ЦБ РФ, графики и ИИ-анализ.\n\n👇 *Выберите действие:*',
     { format: 'markdown', attachments: [parserMenu()] }
@@ -71,19 +77,12 @@ bot.action('open_parser', async (ctx) => {
 });
 
 bot.action('open_ai', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  userSelections[userId] = 'ai_mode'; // Запоминаем режим ИИ
+  
   await ctx.reply(
     '🤖 *Админ-бот с ИИ*\n\nУмный помощник на базе Yandex GPT.\n\n👇 *Выберите действие:*',
     { format: 'markdown', attachments: [aiMenu()] }
-  );
-});
-
-// === ИИ: Задать вопрос ===
-bot.action('ai_ask', async (ctx) => {
-  const userId = ctx.user?.user_id;
-  userStates[userId] = { action: 'ai_ask_question' };
-  await ctx.reply(
-    '💬 *Введите ваш вопрос:*\n\nЯ отвечу на любые темы про разработку, IT, карьеру.',
-    { format: 'markdown' }
   );
 });
 
@@ -418,16 +417,34 @@ bot.on('message_created', async (ctx) => {
   const userId = ctx.user?.user_id;
   const state = userStates[userId];
 
-  // Если пользователь просто пишет текст (не в диалоге) - отдаем Умному ИИ
+// Если пользователь просто пишет текст (не в диалоге)
   if (!state) {
-    try {
-      const answer = await crm.smartAskYandexGPT(text);
-      if (answer) {
+    const mode = userSelections[userId]; // Получаем текущий режим
+
+    if (mode === 'ai_mode') {
+      // Если мы в режиме ИИ - отвечаем через ai.js
+      try {
+        const answer = await ai.askDeveloper(text);
         await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
+      } catch (err) {
+        console.error(err);
+        await ctx.reply('❌ Ошибка при запросе к ИИ.');
       }
-    } catch (err) {
-      console.error(err);
-      await ctx.reply('❌ Ошибка при запросе к ИИ.');
+    } else if (mode === 'crm_mode') {
+      // Если мы в режиме CRM - отвечаем через crm.js (Умный ИИ)
+      try {
+        const answer = await crm.smartAskYandexGPT(text);
+        await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
+      } catch (err) {
+        console.error(err);
+        await ctx.reply('❌ Ошибка при запросе к CRM.');
+      }
+    } else {
+      // Если режим не выбран - просим выбрать кнопку
+      await ctx.reply(
+        '🤔 Пожалуйста, сначала выберите нужный раздел в меню (CRM, Парсер или ИИ).',
+        { attachments: [mainMenu()] }
+      );
     }
     return;
   }
