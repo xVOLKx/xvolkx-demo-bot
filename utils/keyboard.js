@@ -54,7 +54,7 @@ function parserMenu() {
       Keyboard.button.callback('⚙️ Выбор валют', 'parser_select'),
     ],
     [
-      Keyboard.button.callback('🤖 ИИ-анализ', 'parser_ai'),
+      Keyboard.button.callback('📋 Полный отчёт (График + ИИ)', 'parser_report'),
     ],
     [Keyboard.button.callback('⬅️ Назад', 'back_main')],
   ]);
