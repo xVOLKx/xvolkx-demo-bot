@@ -338,12 +338,19 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
     userSelections[userId].push(currencyName); // Добавить
   }
   
-  // Обновляем сообщение (перерисовываем клавиатуру)
   const { selectCurrenciesKeyboard } = require('./utils/keyboard');
-  await ctx.editMessage({
-    text: '🔧 *Выберите валюты для отслеживания:*',
-    attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], 0)]
-  });
+  
+  // Вместо editMessage делаем удаление и отправку нового (в MAX это работает надежнее)
+  try {
+    await ctx.deleteMessage();
+  } catch (e) {
+    // Если не удалось удалить, просто проигнорируем
+  }
+  
+  await ctx.reply(
+    '🔧 *Выберите валюты для отслеживания:*',
+    { format: 'markdown', attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], 0)] }
+  );
   await ctx.answerOnCallback({});
 });
 
@@ -354,10 +361,14 @@ bot.action(/page_(\d+)/, async (ctx) => {
   const rates = await parser.parseCBR();
   const { selectCurrenciesKeyboard } = require('./utils/keyboard');
 
-  await ctx.editMessage({
-    text: '🔧 *Выберите валюты для отслеживания:*',
-    attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], page)]
-  });
+  try {
+    await ctx.deleteMessage();
+  } catch (e) {}
+
+  await ctx.reply(
+    '🔧 *Выберите валюты для отслеживания:*',
+    { format: 'markdown', attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], page)] }
+  );
   await ctx.answerOnCallback({});
 });
 
@@ -371,9 +382,13 @@ bot.action('currencies_done', async (ctx) => {
     return;
   }
   
-  await ctx.editMessage({
-    text: `✅ *Вы выбрали:* ${selected.length} валют. Теперь графики будут строиться только по ним.`,
-  });
+  try {
+    await ctx.deleteMessage();
+  } catch (e) {}
+
+  await ctx.reply(
+    `✅ *Вы выбрали:* ${selected.length} валют. Теперь графики будут строиться только по ним.`
+  );
   await ctx.answerOnCallback({});
 });
 
