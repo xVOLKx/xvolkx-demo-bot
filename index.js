@@ -324,19 +324,13 @@ bot.action('parser_select', async (ctx) => {
 // ОБРАБОТКА КНОПОК ВЫБОРА ВАЛЮТ (TOGGLE)
 // ============================================================
 bot.action(/toggle_currency_(\d+)/, async (ctx) => {
-  // Мгновенный ответ на коллбек
-  await ctx.answerOnCallback({ message: {text: '' } });
-
   const index = parseInt(ctx.match[1]);
   const userId = ctx.user?.user_id;
   
   try {
     const rates = await parser.parseCBR();
     
-    if (index >= rates.length) {
-      console.log('❌ Ошибка: Индекс вне диапазона', index, 'из', rates.length);
-      return;
-    }
+    if (index >= rates.length) return;
     
     const currencyName = rates[index].name;
     if (!userSelections[userId]) userSelections[userId] = [];
@@ -351,44 +345,59 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
     const { selectCurrenciesKeyboard } = require('./utils/keyboard');
     const keyboard = selectCurrenciesKeyboard(rates, userSelections[userId], 0);
     
-    if (!keyboard) {
-      console.log('❌ Ошибка: клавиатура не сформирована');
-      return;
+    // Вместо удаления и отправки нового — РЕДАКТИРУЕМ текущее сообщение
+    try {
+      await ctx.editMessage({
+        text: '🔧 *Выберите валюты для отслеживания:*',
+        format: 'markdown',
+        attachments: [keyboard]
+      });
+    } catch (e) {
+      console.log('⚠️ Ошибка редактирования, пробуем отправить новое:', e.message);
+      await ctx.reply('🔧 *Выберите валюты для отслеживания:*', { format: 'markdown', attachments: [keyboard] });
     }
 
-    try {
-      await ctx.deleteMessage();
-    } catch (e) {
-      console.log('⚠️ Не удалось удалить сообщение (возможно, оно старое)');
-    }
-    
-    await ctx.reply(
-      '🔧 *Выберите валюты для отслеживания:*',
-      { format: 'markdown', attachments: [keyboard] }
-    );
-    console.log('✅ Успешно обновлено для', currencyName);
+    // Отвечаем Максу, что кнопка нажата (с пустым уведомлением, чтобы не было ошибки)
+    await ctx.answerOnCallback({ notification: '' });
     
   } catch (error) {
     console.error('❌ КРИТИЧЕСКАЯ ОШИБКА в toggle_currency_:', error);
+    // Обязательно отвечаем, чтобы Макс не выдавал ошибку
+    await ctx.answerOnCallback({ notification: 'Ошибка' }).catch(() => {});
   }
 });
 
-// Пагинация (стрелочки)
+// ============================================================
+// ПАГИНАЦИЯ (СТРЕЛОЧКИ)
+// ============================================================
 bot.action(/page_(\d+)/, async (ctx) => {
   const page = parseInt(ctx.match[1]);
   const userId = ctx.user?.user_id;
-  const rates = await parser.parseCBR();
-  const { selectCurrenciesKeyboard } = require('./utils/keyboard');
-
+  
   try {
-    await ctx.deleteMessage();
-  } catch (e) {}
+    const rates = await parser.parseCBR();
+    const { selectCurrenciesKeyboard } = require('./utils/keyboard');
+    const keyboard = selectCurrenciesKeyboard(rates, userSelections[userId], page);
 
-  await ctx.reply(
-    '🔧 *Выберите валюты для отслеживания:*',
-    { format: 'markdown', attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], page)] }
-  );
-  await ctx.answerOnCallback({});
+    // Редактируем текущее сообщение, а не удаляем
+    try {
+      await ctx.editMessage({
+        text: '🔧 *Выберите валюты для отслеживания:*',
+        format: 'markdown',
+        attachments: [keyboard]
+      });
+    } catch (e) {
+      console.log('⚠️ Ошибка редактирования при пагинации, отправляем новое');
+      await ctx.reply('🔧 *Выберите валюты для отслеживания:*', { format: 'markdown', attachments: [keyboard] });
+    }
+
+    // Закрываем "часики" загрузки на кнопке
+    await ctx.answerOnCallback({ notification: '' });
+    
+  } catch (error) {
+    console.error('❌ Ошибка в пагинации:', error);
+    await ctx.answerOnCallback({ notification: 'Ошибка' }).catch(() => {});
+  }
 });
 
 // Кнопка "Готово"
@@ -412,7 +421,7 @@ bot.action('currencies_done', async (ctx) => {
 });
 
 bot.action('noop', async (ctx) => {
-  await ctx.answerOnCallback({});
+  await ctx.answerOnCallback({ notification: '' });
 });
 
 // Полный отчёт (График + ИИ в одном сообщении)
