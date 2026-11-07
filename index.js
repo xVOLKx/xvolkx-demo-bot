@@ -325,7 +325,7 @@ bot.action('parser_select', async (ctx) => {
 // ============================================================
 bot.action(/toggle_currency_(\d+)/, async (ctx) => {
   // Мгновенный ответ на коллбек
-  await ctx.answerOnCallback({});
+  await ctx.answerOnCallback({ message: {text: '' } });
 
   const index = parseInt(ctx.match[1]);
   const userId = ctx.user?.user_id;
@@ -408,7 +408,7 @@ bot.action('currencies_done', async (ctx) => {
   await ctx.reply(
     `✅ *Вы выбрали:* ${selected.length} валют. Теперь графики будут строиться только по ним.`
   );
-  await ctx.answerOnCallback({});
+  await ctx.answerOnCallback({ message: { text: '' } });
 });
 
 bot.action('noop', async (ctx) => {
