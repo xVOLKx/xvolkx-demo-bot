@@ -324,41 +324,53 @@ bot.action('parser_select', async (ctx) => {
 // ОБРАБОТКА КНОПОК ВЫБОРА ВАЛЮТ (TOGGLE)
 // ============================================================
 bot.action(/toggle_currency_(\d+)/, async (ctx) => {
-  // Мгновенный ответ на коллбек для снятия индикатора загрузки
+  // Мгновенный ответ на коллбек
   await ctx.answerOnCallback({});
 
   const index = parseInt(ctx.match[1]);
   const userId = ctx.user?.user_id;
   
-  // Получение данных из кэша (без повторного парсинга)
-  const rates = await parser.parseCBR();
-  
-  if (index >= rates.length) return;
-  
-  const currencyName = rates[index].name;
-  if (!userSelections[userId]) userSelections[userId] = [];
-  
-  // Логика переключения (добавить/удалить)
-  const idx = userSelections[userId].indexOf(currencyName);
-  if (idx > -1) {
-    userSelections[userId].splice(idx, 1);
-  } else {
-    userSelections[userId].push(currencyName);
-  }
-  
-  const { selectCurrenciesKeyboard } = require('./utils/keyboard');
-  
-  // Удаление старого сообщения и отправка обновленного меню
   try {
-    await ctx.deleteMessage();
-  } catch (e) {
-    // Игнорируем ошибку, если сообщение уже недоступно
+    const rates = await parser.parseCBR();
+    
+    if (index >= rates.length) {
+      console.log('❌ Ошибка: Индекс вне диапазона', index, 'из', rates.length);
+      return;
+    }
+    
+    const currencyName = rates[index].name;
+    if (!userSelections[userId]) userSelections[userId] = [];
+    
+    const idx = userSelections[userId].indexOf(currencyName);
+    if (idx > -1) {
+      userSelections[userId].splice(idx, 1);
+    } else {
+      userSelections[userId].push(currencyName);
+    }
+    
+    const { selectCurrenciesKeyboard } = require('./utils/keyboard');
+    const keyboard = selectCurrenciesKeyboard(rates, userSelections[userId], 0);
+    
+    if (!keyboard) {
+      console.log('❌ Ошибка: клавиатура не сформирована');
+      return;
+    }
+
+    try {
+      await ctx.deleteMessage();
+    } catch (e) {
+      console.log('⚠️ Не удалось удалить сообщение (возможно, оно старое)');
+    }
+    
+    await ctx.reply(
+      '🔧 *Выберите валюты для отслеживания:*',
+      { format: 'markdown', attachments: [keyboard] }
+    );
+    console.log('✅ Успешно обновлено для', currencyName);
+    
+  } catch (error) {
+    console.error('❌ КРИТИЧЕСКАЯ ОШИБКА в toggle_currency_:', error);
   }
-  
-  await ctx.reply(
-    '🔧 *Выберите валюты для отслеживания:*',
-    { format: 'markdown', attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], 0)] }
-  );
 });
 
 // Пагинация (стрелочки)
