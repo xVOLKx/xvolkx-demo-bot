@@ -320,38 +320,45 @@ bot.action('parser_select', async (ctx) => {
   }
 });
 
-// Обработка нажатия на валюту (Toggle)
+// ============================================================
+// ОБРАБОТКА КНОПОК ВЫБОРА ВАЛЮТ (TOGGLE)
+// ============================================================
 bot.action(/toggle_currency_(\d+)/, async (ctx) => {
+  // Мгновенный ответ на коллбек для снятия индикатора загрузки
+  await ctx.answerOnCallback({});
+
   const index = parseInt(ctx.match[1]);
   const userId = ctx.user?.user_id;
+  
+  // Получение данных из кэша (без повторного парсинга)
   const rates = await parser.parseCBR();
   
-  if (index >= rates.length) return ctx.answerOnCallback({ message: { text: 'Ошибка' } });
+  if (index >= rates.length) return;
   
   const currencyName = rates[index].name;
   if (!userSelections[userId]) userSelections[userId] = [];
   
+  // Логика переключения (добавить/удалить)
   const idx = userSelections[userId].indexOf(currencyName);
   if (idx > -1) {
-    userSelections[userId].splice(idx, 1); // Убрать
+    userSelections[userId].splice(idx, 1);
   } else {
-    userSelections[userId].push(currencyName); // Добавить
+    userSelections[userId].push(currencyName);
   }
   
   const { selectCurrenciesKeyboard } = require('./utils/keyboard');
   
-  // Вместо editMessage делаем удаление и отправку нового (в MAX это работает надежнее)
+  // Удаление старого сообщения и отправка обновленного меню
   try {
     await ctx.deleteMessage();
   } catch (e) {
-    // Если не удалось удалить, просто проигнорируем
+    // Игнорируем ошибку, если сообщение уже недоступно
   }
   
   await ctx.reply(
     '🔧 *Выберите валюты для отслеживания:*',
     { format: 'markdown', attachments: [selectCurrenciesKeyboard(rates, userSelections[userId], 0)] }
   );
-  await ctx.answerOnCallback({});
 });
 
 // Пагинация (стрелочки)

@@ -45,9 +45,21 @@ async function initParserDatabase() {
 }
 
 // ============================================================
+// КЭШИРОВАНИЕ КУРСОВ (для оптимизации запросов к ЦБ)
+// ============================================================
+let cachedRates = null;
+let cacheTime = 0;
+
+// ============================================================
 // ПАРСИНГ КУРСОВ ЦБ РФ
 // ============================================================
 async function parseCBR() {
+  // Проверка кэша: если данным меньше 10 минут, возвращаем их
+  if (cachedRates && (Date.now() - cacheTime < 600000)) {
+    return cachedRates;
+  }
+
+  console.log('⏳ Запрос актуальных курсов с ЦБ РФ...');
   const url = 'https://www.cbr.ru/scripts/XML_daily.asp';
   const response = await axios.get(url, { responseType: 'arraybuffer' });
   const decoded = iconv.decode(response.data, 'win1251');
@@ -60,6 +72,10 @@ async function parseCBR() {
     rates.push({ name, value });
   });
 
+  // Обновление кэша
+  cachedRates = rates;
+  cacheTime = Date.now();
+  
   return rates;
 }
 
