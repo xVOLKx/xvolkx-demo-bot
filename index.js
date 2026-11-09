@@ -19,7 +19,7 @@ const bot = new Bot(process.env.BOT_TOKEN);
 
 // Состояния пользователей (для диалогов)
 const userStates = {};
-const userSelections = {};
+const userSelections = {}; // Хранит выбранные валюты (массив) или текущий режим (строка)
 
 // ============================================================
 // ГЛАВНОЕ МЕНЮ
@@ -58,7 +58,7 @@ bot.command('start', async (ctx) => {
 // ============================================================
 bot.action('open_crm', async (ctx) => {
   const userId = ctx.user?.user_id;
-  userSelections[userId] = 'crm_mode'; // Запоминаем режим CRM
+  userSelections[userId] = 'crm_mode'; 
   
   await ctx.reply(
     '🚀 *CRM-бот*\n\nУправление клиентами, заказами и статистикой.\n\n👇 *Выберите действие:*',
@@ -68,7 +68,7 @@ bot.action('open_crm', async (ctx) => {
 
 bot.action('open_parser', async (ctx) => {
   const userId = ctx.user?.user_id;
-  userSelections[userId] = 'parser_mode'; // Запоминаем режим Парсера
+  userSelections[userId] = 'parser_mode'; 
   
   await ctx.reply(
     '📊 *Парсер валют*\n\nКурсы валют с ЦБ РФ, графики и ИИ-анализ.\n\n👇 *Выберите действие:*',
@@ -78,7 +78,7 @@ bot.action('open_parser', async (ctx) => {
 
 bot.action('open_ai', async (ctx) => {
   const userId = ctx.user?.user_id;
-  userSelections[userId] = 'ai_mode'; // Запоминаем режим ИИ
+  userSelections[userId] = 'ai_mode'; 
   
   await ctx.reply(
     '🤖 *Админ-бот с ИИ*\n\nУмный помощник на базе Yandex GPT.\n\n👇 *Выберите действие:*',
@@ -245,7 +245,10 @@ bot.action('parser_week', async (ctx) => {
   try {
     await ctx.reply('⏳ Строю график...');
     const userId = ctx.user?.user_id;
-    const selected = userSelections[userId] || [];
+    
+    // Проверка: если в userSelections лежит строка (режим), делаем её пустым массивом
+    let selected = userSelections[userId];
+    if (!Array.isArray(selected)) selected = [];
 
     let rates = await parser.getLatestRates();
     if (selected.length > 0) {
@@ -302,11 +305,13 @@ bot.action('parser_week', async (ctx) => {
 // Выбор валют
 bot.action('parser_select', async (ctx) => {
   try {
-    // Чтобы не парсить ЦБ каждый раз, можно брать из базы, но для простоты спарсим
     const rates = await parser.parseCBR();
     const userId = ctx.user?.user_id;
     
-    if (!userSelections[userId]) userSelections[userId] = [];
+    // Проверка на массив: если там строка 'parser_mode', заменяем на массив
+    if (!Array.isArray(userSelections[userId])) {
+      userSelections[userId] = [];
+    }
     
     const { selectCurrenciesKeyboard } = require('./utils/keyboard');
     
@@ -330,10 +335,17 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
   try {
     const rates = await parser.parseCBR();
     
-    if (index >= rates.length) return;
+    if (index >= rates.length) {
+       await ctx.answerOnCallback({ notification: 'Ошибка: валюта не найдена' });
+       return;
+    }
     
+    // Проверка на массив перед пушем
+    if (!Array.isArray(userSelections[userId])) {
+      userSelections[userId] = [];
+    }
+
     const currencyName = rates[index].name;
-    if (!userSelections[userId]) userSelections[userId] = [];
     
     const idx = userSelections[userId].indexOf(currencyName);
     if (idx > -1) {
@@ -357,12 +369,11 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
       await ctx.reply('🔧 *Выберите валюты для отслеживания:*', { format: 'markdown', attachments: [keyboard] });
     }
 
-    // Отвечаем Максу, что кнопка нажата (с пустым уведомлением, чтобы не было ошибки)
+    // Отвечаем Максу, что кнопка нажата
     await ctx.answerOnCallback({ notification: '' });
     
   } catch (error) {
     console.error('❌ КРИТИЧЕСКАЯ ОШИБКА в toggle_currency_:', error);
-    // Обязательно отвечаем, чтобы Макс не выдавал ошибку
     await ctx.answerOnCallback({ notification: 'Ошибка' }).catch(() => {});
   }
 });
@@ -376,10 +387,14 @@ bot.action(/page_(\d+)/, async (ctx) => {
   
   try {
     const rates = await parser.parseCBR();
+    
+    if (!Array.isArray(userSelections[userId])) {
+      userSelections[userId] = [];
+    }
+
     const { selectCurrenciesKeyboard } = require('./utils/keyboard');
     const keyboard = selectCurrenciesKeyboard(rates, userSelections[userId], page);
 
-    // Редактируем текущее сообщение, а не удаляем
     try {
       await ctx.editMessage({
         text: '🔧 *Выберите валюты для отслеживания:*',
@@ -391,7 +406,6 @@ bot.action(/page_(\d+)/, async (ctx) => {
       await ctx.reply('🔧 *Выберите валюты для отслеживания:*', { format: 'markdown', attachments: [keyboard] });
     }
 
-    // Закрываем "часики" загрузки на кнопке
     await ctx.answerOnCallback({ notification: '' });
     
   } catch (error) {
@@ -405,8 +419,8 @@ bot.action('currencies_done', async (ctx) => {
   const userId = ctx.user?.user_id;
   const selected = userSelections[userId] || [];
   
-  if (selected.length === 0) {
-    await ctx.answerOnCallback({ message: { text: 'Вы не выбрали ни одной валюты' } });
+  if (!Array.isArray(selected) || selected.length === 0) {
+    await ctx.answerOnCallback({ notification: 'Вы не выбрали ни одной валюты' });
     return;
   }
   
@@ -417,7 +431,7 @@ bot.action('currencies_done', async (ctx) => {
   await ctx.reply(
     `✅ *Вы выбрали:* ${selected.length} валют. Теперь графики будут строиться только по ним.`
   );
-  await ctx.answerOnCallback({ message: { text: '' } });
+  await ctx.answerOnCallback({ notification: '' });
 });
 
 bot.action('noop', async (ctx) => {
@@ -429,7 +443,9 @@ bot.action('parser_report', async (ctx) => {
   try {
     await ctx.reply('⏳ Собираю данные, строю график и анализирую...');
     const userId = ctx.user?.user_id;
-    const selected = userSelections[userId] || [];
+    
+    let selected = userSelections[userId];
+    if (!Array.isArray(selected)) selected = [];
 
     let rates = await parser.getLatestRates();
     if (selected.length > 0) {
