@@ -101,6 +101,21 @@ bot.action('ai_about', async (ctx) => {
   );
 });
 
+// === ИИ: Задать вопрос ===
+bot.action('ai_ask', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  
+  // Ставим состояние, что ждем вопрос от пользователя
+  userStates[userId] = { action: 'ai_ask_question' };
+  userSelections[userId] = 'ai_mode'; 
+  
+  await ctx.reply(
+    '💬 *Задайте ваш вопрос:*\n\nПросто напишите его в чат, и я отвечу с помощью Yandex GPT.',
+    { format: 'markdown', attachments: [aiMenu()] }
+  );
+  await ctx.answerOnCallback({ notification: '' });
+});
+
 // === ИИ: Примеры ===
 bot.action('ai_examples', async (ctx) => {
   await ctx.reply(
@@ -664,7 +679,7 @@ bot.on('message_created', async (ctx) => {
     await ctx.reply('🤔 Думаю...');
 
     try {
-      const answer = await crm.smartAskYandexGPT(text);
+      const answer = await ai.askDeveloper(text);
       await ctx.reply(`🤖 ${answer}`, {
         format: 'markdown',
         attachments: [aiMenu()],
