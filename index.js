@@ -114,11 +114,13 @@ bot.command('order', async (ctx) => {
   stats.orders++;
   stats.users.add(userId);
 
+  // Мгновенный ответ без ожидания ИИ
   await ctx.reply(
     `✅ *Заявка #${order.id} принята!*\n\n` +
     `Администратор свяжется с вами в ближайшее время.`,
     { format: 'markdown', attachments: [aiMenu()] }
   );
+});
 
 // Команда /list (список заявок)
 bot.command('list', async (ctx) => {
