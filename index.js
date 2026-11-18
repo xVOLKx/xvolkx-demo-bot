@@ -22,6 +22,17 @@ const userStates = {};
 const userSelections = {}; // Хранит выбранные валюты (массив) или текущий режим (строка)
 
 // ============================================================
+// ХРАНИЛИЩЕ ЗАЯВОК (для Админ-бота)
+// ============================================================
+const orders = [];
+let stats = { orders: 0, users: new Set() };
+const userCooldown = {};
+const spamWords = ['тест', 'спам', 'проверка', '123', 'test', 'spam'];
+
+// ID админа для уведомлений (берем из .env)
+const ADMIN_MAX_ID = Number(process.env.ADMIN_CHAT_ID);
+
+// ============================================================
 // ГЛАВНОЕ МЕНЮ
 // ============================================================
 async function showMainMenu(ctx) {
@@ -51,6 +62,89 @@ bot.command('start', async (ctx) => {
   }
 
   await showMainMenu(ctx);
+});
+
+// ============================================================
+// АДМИН-БОТ: КОМАНДЫ ЗАЯВОК
+// ============================================================
+
+// Команда /order
+bot.command('order', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  // В MAX текст сообщения лежит в ctx.message.body.text
+  const text = ctx.message?.body?.text?.replace('/order', '').trim() || '';
+
+  if (!text) return ctx.reply('📝 Напишите заявку после команды, например: /order Нужен бот');
+  if (text.length < 10) return ctx.reply('📝 Опишите заявку подробнее (минимум 10 символов)');
+  
+  if (spamWords.some(word => text.toLowerCase().includes(word))) {
+    return ctx.reply('🚫 Ваша заявка похожа на спам.');
+  }
+
+  const now = Date.now();
+  if (userCooldown[userId] && now - userCooldown[userId] < 60000) {
+    return ctx.reply('⏳ Подождите 1 минуту между заявками.');
+  }
+  userCooldown[userId] = now;
+
+  const order = {
+    id: orders.length + 1,
+    username: ctx.user?.username || 'без логина',
+    userId: userId,
+    text,
+    time: new Date().toLocaleString('ru-RU'),
+  };
+  orders.push(order);
+
+  // Отправка уведомления админу (тебе)
+  if (ADMIN_MAX_ID) {
+    try {
+      await bot.api.sendMessage({
+        chat_id: ADMIN_MAX_ID,
+        text: `📩 *Новая заявка #${order.id}*\n👤 От: @${order.username}\n🆔 ID: ${order.userId}\n📅 Время: ${order.time}\n\n📝 Текст:\n${text}`,
+        format: 'markdown'
+      });
+    } catch (e) {
+      console.log('⚠️ Не удалось отправить уведомление админу:', e.message);
+    }
+  }
+
+  stats.orders++;
+  stats.users.add(userId);
+
+  // Ответ ИИ
+  try {
+    const answer = await ai.askDeveloper(`Ответь вежливо на заявку: "${text}". Скажи, что заявка принята, и администратор свяжется.`);
+    await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
+  } catch (err) {
+    await ctx.reply('✅ Заявка принята! Администратор свяжется с вами.');
+  }
+});
+
+// Команда /list (список заявок для админа)
+bot.command('list', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  if (userId !== ADMIN_MAX_ID) return; // Проверка на админа
+
+  if (orders.length === 0) return ctx.reply('📭 Заявок пока нет.');
+
+  let text = '📋 *Список заявок:*\n\n';
+  orders.forEach(o => {
+    text += `📩 Заявка #${o.id} — @${o.username}\n`;
+  });
+
+  await ctx.reply(text, { format: 'markdown' });
+});
+
+// Команда /stats (статистика для админа)
+bot.command('stats', async (ctx) => {
+  const userId = ctx.user?.user_id;
+  if (userId !== ADMIN_MAX_ID) return;
+
+  await ctx.reply(
+    `📊 *Статистика*\n\n📩 Заявок: ${stats.orders}\n👥 Пользователей: ${stats.users.size}`,
+    { format: 'markdown' }
+  );
 });
 
 // ============================================================
@@ -135,7 +229,10 @@ bot.action('ai_examples', async (ctx) => {
 bot.action('open_commands', async (ctx) => {
   await ctx.reply(
     '📚 *Доступные команды:*\n\n' +
-    '• *статистика* — общая статистика\n' +
+    '• */order* — оставить заявку\n' +
+    '• */list* — список заявок (админ)\n' +
+    '• */stats* — статистика (админ)\n' +
+    '• *статистика* — статистика CRM\n' +
     '• *топ клиентов* — топ-5 клиентов\n' +
     '• *отчёт за 3 дня* — последние заказы\n' +
     '• *прогноз* — прогноз заказов\n\n' +
