@@ -1,5 +1,5 @@
 // ============================================================
-// XvolkX Demo Bot — главный файл (CRM + Parser)
+// XvolkX Demo Bot — главный файл (CRM + Parser + AI)
 // ============================================================
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -13,23 +13,21 @@ const parser = require('./modules/parser');
 const ai = require('./modules/ai');
 
 // ============================================================
-// СОЗДАНИЕ БОТА
+// СОЗДАНИЕ БОТА И ХРАНИЛИЩ
 // ============================================================
 const bot = new Bot(process.env.BOT_TOKEN);
 
-// Состояния пользователей (для диалогов)
+// Состояния пользователей
 const userStates = {};
-const userSelections = {}; // Хранит выбранные валюты (массив) или текущий режим (строка)
+const userSelections = {}; 
 
-// ============================================================
-// ХРАНИЛИЩЕ ЗАЯВОК (для Админ-бота)
-// ============================================================
+// Хранилище заявок (для Админ-бота)
 const orders = [];
 let stats = { orders: 0, users: new Set() };
 const userCooldown = {};
 const spamWords = ['тест', 'спам', 'проверка', '123', 'test', 'spam'];
 
-// ID админа для уведомлений (берем из .env)
+// ID админа для уведомлений
 const ADMIN_MAX_ID = Number(process.env.ADMIN_CHAT_ID);
 
 // ============================================================
@@ -65,13 +63,18 @@ bot.command('start', async (ctx) => {
 });
 
 // ============================================================
-// АДМИН-БОТ: КОМАНДЫ ЗАЯВОК
+// КОМАНДЫ АДМИН-БОТА (работают только в режиме ИИ)
 // ============================================================
 
 // Команда /order
 bot.command('order', async (ctx) => {
   const userId = ctx.user?.user_id;
-  // В MAX текст сообщения лежит в ctx.message.body.text
+  
+  // Проверка режима
+  if (userSelections[userId] !== 'ai_mode') {
+    return ctx.reply('🤔 Пожалуйста, сначала зайдите в раздел «Админ-бот с ИИ» в главном меню.', { attachments: [mainMenu()] });
+  }
+
   const text = ctx.message?.body?.text?.replace('/order', '').trim() || '';
 
   if (!text) return ctx.reply('📝 Напишите заявку после команды, например: /order Нужен бот');
@@ -96,7 +99,6 @@ bot.command('order', async (ctx) => {
   };
   orders.push(order);
 
-  // Отправка уведомления админу (тебе)
   if (ADMIN_MAX_ID) {
     try {
       await bot.api.sendMessage({
@@ -112,7 +114,6 @@ bot.command('order', async (ctx) => {
   stats.orders++;
   stats.users.add(userId);
 
-  // Ответ ИИ
   try {
     const answer = await ai.askDeveloper(`Ответь вежливо на заявку: "${text}". Скажи, что заявка принята, и администратор свяжется.`);
     await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
@@ -121,10 +122,15 @@ bot.command('order', async (ctx) => {
   }
 });
 
-// Команда /list (список заявок для админа)
+// Команда /list (список заявок)
 bot.command('list', async (ctx) => {
   const userId = ctx.user?.user_id;
-  if (userId !== ADMIN_MAX_ID) return; // Проверка на админа
+  
+  if (userSelections[userId] !== 'ai_mode') {
+    return ctx.reply('🤔 Эта команда доступна только в разделе «Админ-бот с ИИ».');
+  }
+  
+  if (userId !== ADMIN_MAX_ID) return; 
 
   if (orders.length === 0) return ctx.reply('📭 Заявок пока нет.');
 
@@ -136,9 +142,14 @@ bot.command('list', async (ctx) => {
   await ctx.reply(text, { format: 'markdown' });
 });
 
-// Команда /stats (статистика для админа)
+// Команда /stats (статистика)
 bot.command('stats', async (ctx) => {
   const userId = ctx.user?.user_id;
+  
+  if (userSelections[userId] !== 'ai_mode') {
+    return ctx.reply('🤔 Эта команда доступна только в разделе «Админ-бот с ИИ».');
+  }
+
   if (userId !== ADMIN_MAX_ID) return;
 
   await ctx.reply(
@@ -198,13 +209,11 @@ bot.action('ai_about', async (ctx) => {
 // === ИИ: Задать вопрос ===
 bot.action('ai_ask', async (ctx) => {
   const userId = ctx.user?.user_id;
-  
-  // Ставим состояние, что ждем вопрос от пользователя
   userStates[userId] = { action: 'ai_ask_question' };
   userSelections[userId] = 'ai_mode'; 
   
   await ctx.reply(
-    '💬 *Задайте ваш вопрос:*\n\nПросто напишите его в чат, и я отвечу с помощью Yandex GPT.',
+    '💬 *Задайте ваш вопрос:*\n\nПросто напишите его в чат, и я отвечу с помощью Yandex GPT.\n\n_(Также вы можете оставить заявку командой /order)_',
     { format: 'markdown', attachments: [aiMenu()] }
   );
   await ctx.answerOnCallback({ notification: '' });
@@ -358,7 +367,6 @@ bot.action('parser_week', async (ctx) => {
     await ctx.reply('⏳ Строю график...');
     const userId = ctx.user?.user_id;
     
-    // Проверка: если в userSelections лежит строка (режим), делаем её пустым массивом
     let selected = userSelections[userId];
     if (!Array.isArray(selected)) selected = [];
 
@@ -367,7 +375,6 @@ bot.action('parser_week', async (ctx) => {
       rates = rates.filter(r => selected.includes(r.name));
     }
 
-    // Убираем дубликаты
     const uniqueRates = [];
     const seen = new Set();
     for (const rate of rates) {
@@ -420,7 +427,6 @@ bot.action('parser_select', async (ctx) => {
     const rates = await parser.parseCBR();
     const userId = ctx.user?.user_id;
     
-    // Проверка на массив: если там строка 'parser_mode', заменяем на массив
     if (!Array.isArray(userSelections[userId])) {
       userSelections[userId] = [];
     }
@@ -452,7 +458,6 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
        return;
     }
     
-    // Проверка на массив перед пушем
     if (!Array.isArray(userSelections[userId])) {
       userSelections[userId] = [];
     }
@@ -469,7 +474,6 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
     const { selectCurrenciesKeyboard } = require('./utils/keyboard');
     const keyboard = selectCurrenciesKeyboard(rates, userSelections[userId], 0);
     
-    // Вместо удаления и отправки нового — РЕДАКТИРУЕМ текущее сообщение
     try {
       await ctx.editMessage({
         text: '🔧 *Выберите валюты для отслеживания:*',
@@ -481,7 +485,6 @@ bot.action(/toggle_currency_(\d+)/, async (ctx) => {
       await ctx.reply('🔧 *Выберите валюты для отслеживания:*', { format: 'markdown', attachments: [keyboard] });
     }
 
-    // Отвечаем Максу, что кнопка нажата
     await ctx.answerOnCallback({ notification: '' });
     
   } catch (error) {
@@ -564,7 +567,6 @@ bot.action('parser_report', async (ctx) => {
       rates = rates.filter(r => selected.includes(r.name));
     }
 
-    // Очистка дублей
     const uniqueRates = [];
     const seen = new Set();
     for (const rate of rates) {
@@ -581,7 +583,6 @@ bot.action('parser_report', async (ctx) => {
 
     const chart = await parser.createChart(uniqueRates.slice(0, 10));
 
-    // Загрузка картинки в MAX
     const FormData = require('form-data');
     const fs = require('fs');
     const path = require('path');
@@ -601,18 +602,15 @@ bot.action('parser_report', async (ctx) => {
     const token = response.data.photos[keys[0]].token;
     fs.unlinkSync(tmpPath);
 
-    // Формируем текст
     let text = '📊 *Курсы валют (ЦБ РФ)*\n\n';
     uniqueRates.slice(0, 7).forEach(item => {
       text += `• ${item.name}: ${parseFloat(item.value).toFixed(2)} ₽\n`;
     });
     if (uniqueRates.length > 7) text += `\n_... и ещё ${uniqueRates.length - 7} валют_`;
 
-    // ИИ-анализ
     const analysis = await parser.analyzeRates(uniqueRates.slice(0, 10));
     text += `\n\n🤖 *Анализ и прогноз:*\n${analysis}`;
 
-    // Отправляем картинку с текстом в одном сообщении
     await ctx.reply(text, {
       format: 'markdown',
       attachments: [{ type: 'image', payload: { token } }],
@@ -633,12 +631,10 @@ bot.on('message_created', async (ctx) => {
   const userId = ctx.user?.user_id;
   const state = userStates[userId];
 
-// Если пользователь просто пишет текст (не в диалоге)
   if (!state) {
-    const mode = userSelections[userId]; // Получаем текущий режим
+    const mode = userSelections[userId]; 
 
     if (mode === 'ai_mode') {
-      // Если мы в режиме ИИ - отвечаем через ai.js
       try {
         const answer = await ai.askDeveloper(text);
         await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
@@ -647,7 +643,6 @@ bot.on('message_created', async (ctx) => {
         await ctx.reply('❌ Ошибка при запросе к ИИ.');
       }
     } else if (mode === 'crm_mode') {
-      // Если мы в режиме CRM - отвечаем через crm.js (Умный ИИ)
       try {
         const answer = await crm.smartAskYandexGPT(text);
         await ctx.reply(`🤖 ${answer}`, { format: 'markdown' });
@@ -656,7 +651,6 @@ bot.on('message_created', async (ctx) => {
         await ctx.reply('❌ Ошибка при запросе к CRM.');
       }
     } else {
-      // Если режим не выбран - просим выбрать кнопку
       await ctx.reply(
         '🤔 Пожалуйста, сначала выберите нужный раздел в меню (CRM, Парсер или ИИ).',
         { attachments: [mainMenu()] }
@@ -794,11 +788,9 @@ bot.on('message_created', async (ctx) => {
 // ============================================================
 async function start() {
   try {
-    // Инициализация БД
     await crm.initDatabase();
     await parser.initParserDatabase();
     
-    // Запуск Cron
     parser.startCron(bot, process.env.ADMIN_CHAT_ID);
 
     bot.start();
