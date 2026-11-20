@@ -69,6 +69,8 @@ bot.command('start', async (ctx) => {
 // Команда /order
 bot.command('order', async (ctx) => {
   const userId = ctx.user?.user_id;
+
+  console.log('1. Команда /order вызвана!');
   
   // Проверка режима
   if (userSelections[userId] !== 'ai_mode') {
@@ -76,6 +78,8 @@ bot.command('order', async (ctx) => {
   }
 
   const text = ctx.message?.body?.text?.replace('/order', '').trim() || '';
+
+  console.log('2. Текст заявки:', text);
 
   if (!text) return ctx.reply('📝 Напишите заявку после команды, например: /order Нужен бот');
   if (text.length < 10) return ctx.reply('📝 Опишите заявку подробнее (минимум 10 символов)');
@@ -99,6 +103,8 @@ bot.command('order', async (ctx) => {
   };
   orders.push(order);
 
+   console.log('3. Заявка сохранена в массив. Всего заявок:', orders,length);
+
   if (ADMIN_MAX_ID) {
     try {
       await bot.api.sendMessage({
@@ -106,6 +112,7 @@ bot.command('order', async (ctx) => {
         text: `📩 *Новая заявка #${order.id}*\n👤 От: @${order.username}\n🆔 ID: ${order.userId}\n📅 Время: ${order.time}\n\n📝 Текст:\n${text}`,
         format: 'markdown'
       });
+      console.log('3.1 Уведомлениеадмину отправлено');
     } catch (e) {
       console.log('⚠️ Не удалось отправить уведомление админу:', e.message);
     }
@@ -114,12 +121,17 @@ bot.command('order', async (ctx) => {
   stats.orders++;
   stats.users.add(userId);
 
+  console.log('4. Пытаюсь отправить ответ пользователю...');
+
   // Мгновенный ответ без ожидания ИИ
   await ctx.reply(
     `✅ *Заявка #${order.id} принята!*\n\n` +
     `Администратор свяжется с вами в ближайшее время.`,
     { format: 'markdown', attachments: [aiMenu()] }
   );
+
+  console.log('5. Ответ пользователю успешно отправлен! ');
+
 });
 
 // Команда /list (список заявок)
