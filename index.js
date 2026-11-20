@@ -36,9 +36,7 @@ const ADMIN_MAX_ID = Number(process.env.ADMIN_CHAT_ID);
 bot.api.setMyCommands({
   commands: [
     { name: 'start', description: '👋 Главное меню' },
-    { name: 'order', description: '📝 Оставить заявку' },
-    { name: 'list', description: '📋 Список заявок (админ)' },
-    { name: 'stats', description: '📊 Статистика (админ)' }
+    { name: 'order', description: '📝 Оставить заявку' }
   ]
 });
 
@@ -75,28 +73,19 @@ bot.command('start', async (ctx) => {
 });
 
 // ============================================================
-// КОМАНДЫ АДМИН-БОТА (работают только в режиме ИИ)
+// ОБРАБОТКА ЗАЯВКИ /order (ЧЕРЕЗ HEARS КАК В ДОКУМЕНТАЦИИ)
 // ============================================================
-
-// Команда /order
-bot.command('order', async (ctx) => {
+bot.hears(/^\/order\s+(.+)/, async (ctx) => {
   const userId = ctx.user?.user_id;
+  const text = ctx.match[1]; // Достаем текст, который идет после /order
+
+  console.log('1. Команда /order вызвана! Текст:', text);
   
-  console.log('1. Команда /order вызвана!');
-  
+  // Проверка режима
   if (userSelections[userId] !== 'ai_mode') {
     return ctx.reply('🤔 Пожалуйста, сначала зайдите в раздел «Админ-бот с ИИ» в главном меню.', { attachments: [mainMenu()] });
   }
 
-  // В MAX текст команды может приходить по-разному, берем всё, что после /order
-  const fullText = ctx.message?.body?.text || '';
-  const text = fullText.replace('/order', '').trim();
-
-  console.log('2. Текст заявки:', text);
-
-  if (!text) return ctx.reply('📝 Напишите заявку после команды, например: /order Нужен бот');
-  if (text.length < 5) return ctx.reply('📝 Опишите заявку подробнее (минимум 5 символов)');
-  
   if (spamWords.some(word => text.toLowerCase().includes(word))) {
     return ctx.reply('🚫 Ваша заявка похожа на спам.');
   }
@@ -116,16 +105,15 @@ bot.command('order', async (ctx) => {
   };
   orders.push(order);
 
-  // Исправленная строка
-  console.log('3. Заявка сохранена в массив. Всего заявок:', orders.length);
+  console.log('3. Заявка сохранена. Всего заявок:', orders.length);
 
   if (ADMIN_MAX_ID) {
     try {
-      await bot.api.sendMessage({
-        chat_id: ADMIN_MAX_ID,
-        text: `📩 *Новая заявка #${order.id}*\n👤 От: @${order.username}\n🆔 ID: ${order.userId}\n📅 Время: ${order.time}\n\n📝 Текст:\n${text}`,
-        format: 'markdown'
-      });
+      // По документации MAX используем sendMessageToUser
+      await bot.api.sendMessageToUser(ADMIN_MAX_ID, 
+        `📩 *Новая заявка #${order.id}*\n👤 От: @${order.username}\n📝 Текст:\n${text}`, 
+        { format: 'markdown' }
+      );
       console.log('3.1 Уведомление админу отправлено');
     } catch (e) {
       console.log('⚠️ Не удалось отправить уведомление админу:', e.message);
@@ -146,8 +134,10 @@ bot.command('order', async (ctx) => {
   console.log('5. Ответ пользователю успешно отправлен!');
 });
 
-// Команда /list (список заявок)
-bot.command('list', async (ctx) => {
+// ============================================================
+// КОМАНДЫ /list и /stats (для админа)
+// ============================================================
+bot.hears(/^\/list/, async (ctx) => {
   const userId = ctx.user?.user_id;
   
   if (userSelections[userId] !== 'ai_mode') {
@@ -166,8 +156,7 @@ bot.command('list', async (ctx) => {
   await ctx.reply(text, { format: 'markdown' });
 });
 
-// Команда /stats (статистика)
-bot.command('stats', async (ctx) => {
+bot.hears(/^\/stats/, async (ctx) => {
   const userId = ctx.user?.user_id;
   
   if (userSelections[userId] !== 'ai_mode') {
